@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<style>
+    @import "https://unpkg.com/open-props" layer(design.system);
+@import "https://unpkg.com/open-props/normalize.min.css" layer(demo.support);
+
+div:has(#huey) {
+  background: lime;
+}
+
+div:has(#dewey) {
+  background: hotpink;
+}
+
+::view-transition-group(*) {
+  animation-timing-function: var(--ease-squish-1);
+  animation-timing-function: var(--ease-spring-2);
+  animation-duration: 0.75s;
+}
+
+/* fixex ghosting at the bottom */
+::view-transition-old(opt-1),
+::view-transition-old(opt-2),
+::view-transition-old(opt-3),
+::view-transition-new(opt-1),
+::view-transition-new(opt-2),
+::view-transition-new(opt-3) {
+  height: 100%;
+}
+
+@layer demo {
+  .bento {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: var(--size-3);
+
+    min-inline-size: 75vw;
+    aspect-ratio: var(--ratio-widescreen);
+
+    & > * {
+      border-radius: var(--radius-3);
+      background: var(--surface-2);
+
+      @media (prefers-reduced-motion: no-preference) {
+        &:nth-child(1) {
+          view-transition-name: opt-1;
+          & > label {
+            view-transition-name: opt-1-label;
+          }
+          & > input {
+            view-transition-name: opt-1-input;
+          }
+        }
+        &:nth-child(2) {
+          view-transition-name: opt-2;
+          & > label {
+            view-transition-name: opt-2-label;
+          }
+          & > input {
+            view-transition-name: opt-2-input;
+          }
+        }
+        &:nth-child(3) {
+          view-transition-name: opt-3;
+          & > label {
+            view-transition-name: opt-3-label;
+          }
+          & > input {
+            view-transition-name: opt-3-input;
+          }
+        }
+
+        & :is(label, input) {
+          width: fit-content;
+        }
+      }
+    }
+
+    & > div:has(input:checked) {
+      grid-row: 1 / -1;
+      grid-column: 1;
+    }
+  }
+}
+
+@layer demo.support {
+  html {
+    view-transition-name: none;
+  }
+
+  body {
+    display: grid;
+    place-content: center;
+    padding: var(--size-5);
+    gap: var(--size-5);
+  }
+
+  fieldset {
+    border: none;
+
+    > div {
+      display: grid;
+      grid: 1fr / 1fr;
+      padding: var(--size-3);
+
+      & > label {
+        grid-area: 1 / 1;
+      }
+    }
+  }
+}
+
+footer {
+  margin: 0 auto;
+  text-align: center;
+
+  a {
+    color: blue;
+  }
+}
+
+</style>
+<body>
+    <!--  Orig radiento: https://codepen.io/argyleink/pen/BaGrXmv -->
+<fieldset id="radiento" class="bento">
+    <div>
+      <input type="radio" id="huey" name="drone" value="huey" checked>
+      <label for="huey">Huey</label>
+    </div>
+  
+    <div>
+      <input type="radio" id="dewey" name="drone" value="dewey">
+      <label for="dewey">Dewey</label>
+    </div>
+  
+    <div>
+      <input type="radio" id="louie" name="drone" value="louie">
+      <label for="louie">Louie</label>
+    </div>
+  </fieldset>
+  
+  <footer>
+    <p><mark>Demo for <a href="https://brm.us/auto-transitions-2" target="_top">https://brm.us/auto-transitions-2</a> which has more info on the how and why.</mark></p>
+    <p>Forked from <a href="https://codepen.io/argyleink/pen/BaGrXmv" target="_top">the original Radiento demo</a> by <a href="https://nerdy.dev/" target="_top">Adam</a>.</p>
+  </footer>
+  
+    
+</body>
+
+<script>
+    const $inputs = document.querySelectorAll("#radiento input");
+$inputs.forEach($input => {
+  // @note: we listen on click because that happens *before* a change event.
+  // That way we can prevent the input from getting checked, and then reapply
+  // the selection wrapped in a call to `document.startViewTransition()`
+  $input.addEventListener("click", e => {
+    window.performance && performance.mark('click');
+    syncCheckedStateToAttribute($inputs, e.target);
+  });
+});
+
+// Sync Checked State to a content attribute
+// Sync it back to both the new and old one, so that the MutationObserver receives both elements
+const syncCheckedStateToAttribute = (candidates, target) => {
+  let targetHasAttribute = target.hasAttribute("checked");
+
+  if (targetHasAttribute) return;
+
+  // Remove [checked] from prevTarget
+  const prevTarget = Array.from(candidates).find((candidate) =>
+  candidate.hasAttribute("checked"));
+
+  if (prevTarget) {
+    prevTarget.removeAttribute("checked");
+  }
+
+  // Add [checked] to current target
+  target.setAttribute("checked", "");
+};
+
+
+let isLocked = false;
+const observer = new MutationObserver(async mutations => {
+
+  if (isLocked) return;
+
+  // Extract mutations to a checked property
+  const checkedMutations = mutations.filter(m => m.type == 'attributes' && m.attributeName == 'checked');
+
+  // We need a pair
+  if (checkedMutations.length != 2) return;
+
+  window.performance && performance.mark('mutation-process');
+
+  // Lock MutationObserver, to prevent loops
+  isLocked = true;
+
+  // Extract changes and checked states
+  const [mutation1, mutation2] = checkedMutations;
+  const checked1 = mutation1.target.checked;
+  const checked2 = mutation2.target.checked;
+
+  // Revert back to old state
+  mutation1.target.checked = !checked1;
+  mutation2.target.checked = !checked2;
+
+  // Now reapply new state, with a View Transition
+  window.performance && performance.mark('vt-start');
+  const t = document.startViewTransition(() => {
+    mutation1.target.checked = checked1;
+    mutation2.target.checked = checked2;
+  });
+
+  await t.ready;
+  window.performance && performance.mark('vt-ready');
+  isLocked = false;
+
+  if (window.performance) {
+    const measure = performance.measure(
+    "click",
+    "vt-start",
+    "vt-ready");
+
+    console.log(`Total duration: ${measure.duration}ms`);
+  };
+});
+
+observer.observe(document.querySelector('#radiento'), {
+  subtree: true,
+  characterData: false,
+  attributes: true });
+</script>
+</html>
